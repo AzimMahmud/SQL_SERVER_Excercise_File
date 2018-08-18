@@ -546,9 +546,8 @@ FROM Registration
 WHERE FirstName LIKE @name+'%' OR MiddleName LIKE @name+'%' OR LastName LIKE @name+'%'
 GO
 
-
 EXEC sp_SearchByName 'Nasir'
-
+GO
 
 
 
