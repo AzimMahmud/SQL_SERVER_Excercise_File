@@ -63,15 +63,26 @@ CREATE TABLE appointment
 )
 GO
 
-
 USE PatientManagementSystem
 CREATE TABLE prescription
 (
 	prescriptionID int primary key identity(301, 1),
 	prescriptionDate datetime,
-	dieasesHistory varchar(254),
-	medication varchar(254),
-	patientID int FOREIGN KEY REFERENCES patient(patientID)
+	dieasesHistory text,
+	medication text,
+	appointID int FOREIGN KEY REFERENCES appointment(appointID)
+)
+GO
+
+USE PatientManagementSystem
+CREATE TABLE medicalTest
+(
+	mediTestID int primary key identity,
+	testName varchar(50),
+	cost int,
+	discount int,
+	totalCost int,
+	prescriptionID int FOREIGN KEY REFERENCES prescription(prescriptionID)
 )
 GO
 
@@ -80,10 +91,13 @@ CREATE TABLE billing
 (
 	billingID int identity,
 	consultantFee int,
+	medicalTestCost int,
 	paymentMode varchar(10),
 	paymentStatus varchar(10),
 	paymentDate date,
-	patientID int FOREIGN KEY REFERENCES patient(patientID)
+	totalCost int,
+	mediTestID int FOREIGN KEY REFERENCES medicalTest(mediTestID),
+	prescriptionID int FOREIGN KEY REFERENCES prescription(prescriptionID)
 )
 GO
 
@@ -114,11 +128,13 @@ GO
 USE master
 EXEC sp_helpdb PatientManagementSystem
 GO
+
 USE PatientManagementSystem
 EXEC sp_help registration
 EXEC sp_help patient
 EXEC sp_help appointment
 EXEC sp_help prescription
+EXEC sp_help medicalTest
 EXEC sp_help billing
 GO
 
@@ -131,16 +147,25 @@ DELETE billing
 GO
 
 USE PatientManagementSystem
-DROP TABLE registration
-DROP TABLE  patient
-DROP TABLE  appointment
-DROP TABLE  prescription
+DROP TABLE registration 
+GO
+DROP TABLE  patient 
+GO
+DROP TABLE  appointment 
+GO
+DROP TABLE  prescription 
+GO
+DROP TABLE medicalTest 
+GO
 DROP TABLE  billing
 GO
 --=====================================
 --	INSERT VALUE WITH STORE PROCEDURE
 --=====================================
--- FOR Patient Table
+
+------------------------
+--	 FOR Patient TABLE
+------------------------
 CREATE PROCEDURE sp_patient
 (
 	@patiendid int,
@@ -161,8 +186,12 @@ AS
 BEGIN
 	IF(@tablename = 'registration' AND @operation = 'INSERT')
 		INSERT INTO registration VALUES(@fullname,@email,@password)
+
 	ELSE IF (@tablename = 'registration' AND @operation = 'UPDATE')
 		UPDATE registration SET fullName = @fullname, email = @email, password = @password WHERE regID = @regid
+	
+	ELSE IF(@tablename = 'registration' AND @operation = 'delete')
+		delete FROM registration WHERE regID = @regid
 	---------
 	ELSE IF(@tablename = 'patient' AND @operation = 'INSERT')
 		INSERT INTO patient VALUES(@address, @cellno,@patientage,@patientweitht,@patientheitht,@patientbldgroup,@regid)
@@ -170,17 +199,20 @@ BEGIN
 	ELSE IF(@tablename = 'patient' AND @operation = 'UPDATE')
 		UPDATE patient SET address = @address, cellNo = @cellno, patientAge = @patientage, patientWeight = @patientweitht, patientHeight = @patientheitht, patientBldGroup = @patientbldgroup WHERE patientID = @patiendid
 
-	ELSE IF(@tablename = 'registration' AND @operation = 'delete')
-		delete FROM registration WHERE regID = @regid
 END
 GO
 
 ---- Start Execute sp_patient
-EXEC sp_patient 1, 4, 'Abul Kalam','abulkalam@gmail.com','123456','99/58 Hill view, 2 No Gate, Pachlish, Ctg','018688899', 18, '55', '5.2', 'A-', 'patient','INSERT'
+EXEC sp_patient 1, 1, 'Abul Kalam','abulkalam@gmail.com','123456','99/58 Hill view, 2 No Gate, Pachlish, Ctg','018688899', 18, '55', '5.2', 'A-', 'registration','INSERT'
+GO
+
+EXEC sp_patient 1, 1, 'Abul Kalam','abulkalam@gmail.com','123456','99/58 Hill view, 2 No Gate, Pachlish, Ctg','018688899', 18, '55', '5.2', 'A-', 'patient','INSERT'
 GO
 ---- End 
 
--- FOR Appointment Table
+------------------------------
+--	 FOR Appointment TABLE
+------------------------------
 USE PatientManagementSystem
 GO
 CREATE PROC sp_appointment
@@ -205,22 +237,22 @@ BEGIN
 END
 GO
 
-SELECT * FROM patient
-SELECT * FROM appointment
 ---- Start Execute sp_appointment
 EXEC sp_appointment 1, '08-15-2018', '09:00' , '', 101, 'appointment','INSERT'
 GO
 ---- End 
 
+-------------------------------
+--	 FOR Prescription TABLE
+-------------------------------
 
--- FOR Prescription Table
 CREATE PROC sp_prescription
 (
 	@prescriptionid int,
 	@prescriptiondate date,
 	@dieaseshistory varchar(254),
 	@medication varchar(254),
-	@patientid int,
+	@appointid int,
 	@notes varchar(50),
 	@tablename varchar(20),
 	@operation varchar(20)
@@ -228,23 +260,74 @@ CREATE PROC sp_prescription
 AS
 BEGIN
 	IF(@tablename = 'prescription' AND @operation = 'INSERT')
-		INSERT INTO prescription VALUES(@prescriptiondate,@dieaseshistory,@medication,@patientid,@notes)
+		INSERT INTO prescription VALUES(@prescriptiondate,@dieaseshistory,@medication,@appointid,@notes)
 	ELSE IF(@tablename = 'prescription' AND @operation = 'UPDATE')
 		UPDATE prescription 
-		SET prescriptionDate = @prescriptiondate, dieasesHistory = @dieaseshistory, medication = @medication, patientID = @patientid, notes = @notes
+		SET prescriptionDate = @prescriptiondate, dieasesHistory = @dieaseshistory, medication = @medication, appointID = @appointid, notes = @notes
 	ELSE IF(@tablename = 'prescription' AND @operation = 'DELETE')
 		DELETE prescription WHERE prescriptionID = @prescriptionid
 END
 GO
 
-SELECT * FROM patient
-SELECT * FROM appointment
-SELECT * FROM prescription
 ---- Start Execute sp_prescription
-EXEC sp_prescription 1, '08-07-2018', 'He has a major head problem' , 'Tab: Seclo 20 mg 1-0-1 perday', 103, 'Need operation', 'prescription','INSERT'
+EXEC sp_prescription 1, '08-07-2018', 'He has a major head problem' , 'Tab: Seclo 20 mg 1-0-1 perday', 201, 'Need operation', 'prescription','INSERT'
 GO
 ---- End
 
+------------------------------
+--	 FOR MedicalTest TABLE
+------------------------------
+
+--------------------------------------
+-- function for calculating total cost
+--------------------------------------
+create function fn_totalcost
+(
+@cost int,
+@discount decimal
+)
+Returns decimal
+AS
+Begin
+	declare @totalcost int
+	set @totalcost= @cost - (@cost*(@discount/100))
+	return @totalcost
+End
+GO
+
+CREATE PROCEDURE sp_medicaltest
+(
+	@meditestid int,
+	@testname varchar(50),
+	@cost int,
+	@discount int,
+	@prescriptionid int,
+	@tablename varchar(20),
+	@operation varchar(20)
+)
+AS
+BEGIN
+	declare @totalcost int
+	set @totalcost=dbo.fn_totalcost(@cost,@discount)
+
+	IF(@tablename = 'medicalTest' AND @operation = 'INSERT')
+		INSERT INTO medicalTest VALUES(@testname, @cost , @discount,@totalcost, @prescriptionid)
+	ELSE IF(@tablename = 'billing' AND @operation = 'UPDATE')
+		UPDATE medicalTest 
+		SET testName = @testname, cost = @cost, discount = @discount, totalCost = @totalcost, prescriptionID = @prescriptionid
+	ELSE IF(@tablename = 'billing' AND @operation = 'DELETE')
+		DELETE medicalTest WHERE mediTestID = @meditestid
+END
+GO
+
+---- Start Execute sp_medicaltest
+EXEC sp_medicaltest 1, 'ECG', 120, 15, 301, 'medicalTest','INSERT'
+GO
+---- End
+
+---------------------------
+--	FOR BILLING TABLE
+---------------------------
 CREATE PROC sp_billing
 (
 	@billingid int,
@@ -252,30 +335,54 @@ CREATE PROC sp_billing
 	@paymentmode varchar(10),
 	@paymentstatus varchar(10),
 	@paymentdate date,
-	@patientid int,
+	@meditestid int,
+	@prescriptionid int,
 	@tablename varchar(20),
 	@operation varchar(20)
 )
 AS
 BEGIN
+	declare @medicalcost int
+	set @medicalcost = (SELECT totalCost FROM medicalTest  Where mediTestID = @meditestid)
+
+	declare @totalcost int
+	set @totalcost = @consultantfee + @medicalcost
+
 	IF(@tablename = 'billing' AND @operation = 'INSERT')
-		INSERT INTO billing VALUES(@consultantfee,@paymentmode,@paymentstatus,@paymentdate,@patientid)
+		INSERT INTO billing VALUES(@consultantfee, @medicalcost, @paymentmode, @paymentstatus, @paymentdate, @totalcost, @meditestid,@prescriptionid)
 	ELSE IF(@tablename = 'billing' AND @operation = 'UPDATE')
 		UPDATE billing 
-		SET consultantFee = @consultantfee, paymentMode = @paymentmode, @paymentstatus = @paymentstatus, paymentDate = @paymentdate, patientID = @patientid
+		SET consultantFee = @consultantfee, medicalTestCost = @medicalcost, paymentMode = @paymentmode, @paymentstatus = @paymentstatus, paymentDate = @paymentdate, totalCost =  @totalcost, mediTestID = @meditestid, prescriptionID = @prescriptionid
 	ELSE IF(@tablename = 'billing' AND @operation = 'DELETE')
 		DELETE billing WHERE billingID = @billingid
 END
 GO
 
-SELECT * FROM appointment
-SELECT * FROM prescription
-select * from billing
-GO
 ---- Start Execute sp_billing
-EXEC sp_billing 1, 300, 'NON', 'UnPaid', '08-07-2018', 105, 'billing','INSERT'
+EXEC sp_billing 1, 300, 'NON', 'UnPaid', '08-07-2018', 1, 301, 'billing','INSERT'
 GO
 ---- End
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 --============================
