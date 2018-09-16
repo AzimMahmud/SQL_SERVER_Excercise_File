@@ -167,6 +167,8 @@ Go
 
 
 
+
+
 EXEC sp_InsertTableValues 'Item 9', 'Shirt', 'Black', 'Items', 'INSERT'
 GO
 
