@@ -1,0 +1,9 @@
+create table test(
+	photo varbinary(max)
+)
+
+select * from test
+
+insert into test (photo) 
+SELECT BulkColumn 
+FROM Openrowset( Bulk 'F:\New folder\bus.jpg', Single_Blob) as img
